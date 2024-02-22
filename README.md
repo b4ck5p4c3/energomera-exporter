@@ -1,6 +1,6 @@
 # energomera-exporter
 
-Exporter for Energomera power meters
+Prometheus exporter for Energomera power meters
 
 Environment variables:
 - `SERIAL_PORT` - path to serial port with adapter
