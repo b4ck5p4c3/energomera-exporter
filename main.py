@@ -29,6 +29,8 @@ def port_write(port, data):
 
 def port_read(port, size):
 	result = port.read(size)
+	if len(result) != size:
+		raise ValueError(f'failed to read from port, read {len(result)} != {size}')
 	return result
 
 def open_comms():
