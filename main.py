@@ -140,7 +140,7 @@ class MetricsHandler(http.server.BaseHTTPRequestHandler):
 		self.send_response(200)
 		self.send_header("content-type", "text/plain")
 		self.end_headers()
-		self.wfile.write(b'# energomera metrics\n\n')
+		self.wfile.write(b'# energomera metrics\n')
 		metrics = result_metrics
 		self.wfile.write(b'# HELP Time since last update\n')
 		self.wfile.write(b'# TYPE gauge\n')
