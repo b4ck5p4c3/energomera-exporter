@@ -14,14 +14,14 @@ bytesize = 7
 stopbits = 1
 
 params = [
-	{ 'function': 'POWPP', 'name': 'active_power', 'sub_names': ['a', 'b', 'c'], 'comment': 'Active power on phase {{phase}}' },
-	{ 'function': 'VOLTA', 'name': 'voltage', 'sub_names': ['a', 'b', 'c'], 'comment': 'Voltage on phase {{phase}}' },
-	{ 'function': 'CORUU', 'name': 'phase_angle', 'sub_names': ['ab', 'bc', 'ca'], 'comment': 'Phase angle between {{phase}}' },
-	{ 'function': 'CURRE', 'name': 'current', 'sub_names': ['a', 'b', 'c'], 'comment': 'Current on phase {{phase}}' },
-	{ 'function': 'FREQU', 'name': 'frequency', 'sub_names': ['total'], 'comment': 'Power grid frequency' },
-	{ 'function': 'COS_f', 'name': 'active_power_coeff', 'sub_names': ['total', 'a', 'b', 'c'], 'comment': 'Active power coefficient on {{phase}}' },
-	{ 'function': 'CORIU', 'name': 'i_u_angle', 'sub_names': ['a', 'b', 'c'], 'comment': 'Angle between I and U on phase {{phase}}' },
-	{ 'function': 'TAN_f', 'name': 'reactive_power_coeff', 'sub_names': ['total', 'a', 'b', 'c'], 'comment': 'Reactive power coefficient on {{phase}}' }
+	{ 'function': 'POWPP', 'name': 'active_power', 'sub_names': ['a', 'b', 'c'], 'comment': 'Active power' },
+	{ 'function': 'VOLTA', 'name': 'voltage', 'sub_names': ['a', 'b', 'c'], 'comment': 'Voltage' },
+	{ 'function': 'CORUU', 'name': 'phase_angle', 'sub_names': ['ab', 'bc', 'ca'], 'comment': 'Phase angle' },
+	{ 'function': 'CURRE', 'name': 'current', 'sub_names': ['a', 'b', 'c'], 'comment': 'Current' },
+	{ 'function': 'FREQU', 'name': 'frequency', 'sub_names': ['total'], 'comment': 'Frequency' },
+	{ 'function': 'COS_f', 'name': 'active_power_coeff', 'sub_names': ['total', 'a', 'b', 'c'], 'comment': 'Active power coefficient' },
+	{ 'function': 'CORIU', 'name': 'i_u_angle', 'sub_names': ['a', 'b', 'c'], 'comment': 'Angle between I and U' },
+	{ 'function': 'TAN_f', 'name': 'reactive_power_coeff', 'sub_names': ['total', 'a', 'b', 'c'], 'comment': 'Reactive power coefficient' }
 ]
 
 def port_write(port, data):
@@ -102,9 +102,10 @@ def read_params(port):
 		bcc = port_read(port, 1)
 		check_bcc(raw_result, bcc[0])
 		parsed_result = raw_result[:-1].decode().split('\r\n')[:-1]
+		results[param['name']] = {}
 		for i in range(len(param['sub_names'])):
 			value = parsed_result[i].split('(')[1].split(')')[0]
-			results['energomera_' + param['name'] + '{phase="' + param['sub_names'][i] + '"}'] = (param['comment'].replace('{{phase}}', param['sub_names'][i].upper()), 'gauge', value)
+			results[param['name']][param['sub_names'][i]] = value
 	return results
 
 result_metrics = {}
@@ -126,6 +127,8 @@ def main_query_thread():
 			port.close()
 		except Exception as e:
 			print(e)
+			result_metrics = {}
+			last_update = time.time()
 		time.sleep(10)
 
 class MetricsHandler(http.server.BaseHTTPRequestHandler):
@@ -142,13 +145,19 @@ class MetricsHandler(http.server.BaseHTTPRequestHandler):
 		self.end_headers()
 		self.wfile.write(b'# energomera metrics\n')
 		metrics = result_metrics
-		self.wfile.write(b'# HELP Time since last update\n')
-		self.wfile.write(b'# TYPE gauge\n')
+		self.wfile.write(b'# HELP energomera_time_since_last_update Time since last update\n')
+		self.wfile.write(b'# TYPE energomera_time_since_last_update gauge\n')
 		self.wfile.write(b'energomera_time_since_last_update ' + "{:.3f}".format(time.time() - last_update).encode() + b'\n')
-		for metric in metrics:
-			self.wfile.write(b'# HELP ' + metrics[metric][0].encode() + b'\n')
-			self.wfile.write(b'# TYPE ' + metrics[metric][1].encode() + b'\n')
-			self.wfile.write(metric.encode() + b' ' + metrics[metric][2].encode() + b'\n')
+		for param in params:
+			self.wfile.write(b'# HELP energomera_' + param['name'].encode() + b' ' + param['comment'].encode() + b'\n')
+			self.wfile.write(b'# TYPE energomera_' + param['name'].encode() + b' gauge\n')
+			for subtype in param['sub_names']:
+				self.wfile.write(b'energomera_' + param['name'].encode() + b'{phase="' + subtype.encode() + b'"} ')
+				if param['name'] in metrics and subtype in metrics[param['name']]:
+					self.wfile.write(metrics[param['name']][subtype].encode())
+				else:
+					self.wfile.write(b'0')
+				self.wfile.write(b'\n')
 
 def main_http_thread():
 	with http.server.HTTPServer(("0.0.0.0", http_port), MetricsHandler) as server:
